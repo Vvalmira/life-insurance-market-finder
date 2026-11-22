@@ -2,6 +2,8 @@ import type {
   AreaLevel,
   AreaListResponse,
   MarketArea,
+  MarketDataset,
+  MarketSummary,
 } from "@/server/domain/types";
 
 import { getMarketDataset } from "../repositories/market-repository";
@@ -87,20 +89,44 @@ export async function getArea(geoid: string): Promise<MarketArea | null> {
   return dataset.areas.find((area) => area.geoid === geoid) ?? null;
 }
 
-export async function getSummary(level: AreaLevel) {
-  const dataset = await getMarketDataset();
-  const areas = dataset.areas
-    .filter((area) => area.level === level && area.eligible)
+export function summarizeMarketDataset(
+  dataset: MarketDataset,
+  level: AreaLevel,
+): MarketSummary {
+  const allAreas = dataset.areas.filter((area) => area.level === level);
+  const rankedAreas = allAreas
+    .filter((area) => area.eligible)
     .sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity));
 
+  const totalTargetPopulation = allAreas.reduce(
+    (total, area) => total + area.population60Plus,
+    0,
+  );
+  const rankedTargetPopulation = rankedAreas.reduce(
+    (total, area) => total + area.population60Plus,
+    0,
+  );
+  const targetPopulationCoveragePercent =
+    totalTargetPopulation === 0
+      ? 0
+      : (rankedTargetPopulation / totalTargetPopulation) * 100;
+
   return {
-    areaCount: areas.length,
-    totalTargetPopulation: areas.reduce(
-      (total, area) => total + area.population60Plus,
-      0,
-    ),
-    topArea: areas[0] ?? null,
-    topTen: areas.slice(0, 10),
+    // Retained for API compatibility; rankedAreaCount is the clearer name.
+    areaCount: rankedAreas.length,
+    totalAreaCount: allAreas.length,
+    rankedAreaCount: rankedAreas.length,
+    unrankedAreaCount: allAreas.length - rankedAreas.length,
+    totalTargetPopulation,
+    rankedTargetPopulation,
+    targetPopulationCoveragePercent,
+    topArea: rankedAreas[0] ?? null,
+    topTen: rankedAreas.slice(0, 10),
     metadata: dataset.metadata,
   };
+}
+
+export async function getSummary(level: AreaLevel): Promise<MarketSummary> {
+  const dataset = await getMarketDataset();
+  return summarizeMarketDataset(dataset, level);
 }

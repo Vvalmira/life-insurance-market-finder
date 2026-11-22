@@ -52,3 +52,16 @@ export interface AreaListResponse {
   };
   metadata: DatasetMetadata;
 }
+
+export interface MarketSummary {
+  areaCount: number;
+  totalAreaCount: number;
+  rankedAreaCount: number;
+  unrankedAreaCount: number;
+  totalTargetPopulation: number;
+  rankedTargetPopulation: number;
+  targetPopulationCoveragePercent: number;
+  topArea: MarketArea | null;
+  topTen: MarketArea[];
+  metadata: DatasetMetadata;
+}
