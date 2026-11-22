@@ -37,7 +37,6 @@ export default function MethodologyPage() {
                 <strong>{Math.round(indicator.weight * 100)}%</strong>
                 <h2>{indicator.label}</h2>
                 <p>{indicator.description}</p>
-                <code>{indicator.sourceVariable}</code>
               </article>
             );
           })}

@@ -15,25 +15,19 @@ import type {
   AreaLevel,
   AreaListResponse,
   MarketArea,
+  MarketSummary,
 } from "@/server/domain/types";
 
 import { STATE_OPTIONS } from "../constants";
 import { numberFormatter } from "../format";
 import { AreaDetail } from "./area-detail";
 import { RankingTable } from "./ranking-table";
+import { SortMenu } from "./sort-menu";
 import { TopChart } from "./top-chart";
-
-interface Summary {
-  areaCount: number;
-  totalTargetPopulation: number;
-  topArea: MarketArea | null;
-  topTen: MarketArea[];
-  metadata: AreaListResponse["metadata"];
-}
 
 interface DashboardProps {
   initialAreas: AreaListResponse;
-  initialSummary: Summary;
+  initialSummary: MarketSummary;
 }
 
 export function Dashboard({ initialAreas, initialSummary }: DashboardProps) {
@@ -47,6 +41,7 @@ export function Dashboard({ initialAreas, initialSummary }: DashboardProps) {
   const [summary, setSummary] = useState(initialSummary);
   const [selectedArea, setSelectedArea] = useState<MarketArea | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const censusDocumentationUrl = `https://api.census.gov/data/${areas.metadata.vintage}/acs/acs5/subject.html`;
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setDebouncedSearch(search), 250);
@@ -76,7 +71,7 @@ export function Dashboard({ initialAreas, initialSummary }: DashboardProps) {
         signal: controller.signal,
       }).then((response) => {
         if (!response.ok) throw new Error("Could not load summary");
-        return response.json() as Promise<Summary>;
+        return response.json() as Promise<MarketSummary>;
       }),
     ])
       .then(([nextAreas, nextSummary]) => {
@@ -179,7 +174,7 @@ export function Dashboard({ initialAreas, initialSummary }: DashboardProps) {
             <div>
               <span className="eyebrow">National opportunity index</span>
               <h2>Market rankings</h2>
-              <p>Compare every area on one consistent 0–100 score.</p>
+              <p>Compare areas with sufficient data on one 0–100 score.</p>
             </div>
             <div
               className="level-toggle"
@@ -210,8 +205,14 @@ export function Dashboard({ initialAreas, initialSummary }: DashboardProps) {
               </span>
               <div>
                 <small>Areas ranked</small>
-                <strong>{summary.areaCount}</strong>
-                <p>Nationally comparable</p>
+                <strong>
+                  {summary.rankedAreaCount} / {summary.totalAreaCount}
+                </strong>
+                <p>
+                  {summary.unrankedAreaCount === 0
+                    ? "All available areas"
+                    : `${summary.unrankedAreaCount} lack a required indicator`}
+                </p>
               </div>
             </article>
             <article>
@@ -219,11 +220,15 @@ export function Dashboard({ initialAreas, initialSummary }: DashboardProps) {
                 <UsersRound />
               </span>
               <div>
-                <small>Target population</small>
+                <small>Population coverage</small>
                 <strong>
-                  {numberFormatter.format(summary.totalTargetPopulation)}
+                  {summary.targetPopulationCoveragePercent.toFixed(1)}%
                 </strong>
-                <p>Estimated residents 60+</p>
+                <p>
+                  {numberFormatter.format(summary.rankedTargetPopulation)} of{" "}
+                  {numberFormatter.format(summary.totalTargetPopulation)} age
+                  60+
+                </p>
               </div>
             </article>
             <article className="top-market-card">
@@ -301,23 +306,13 @@ export function Dashboard({ initialAreas, initialSummary }: DashboardProps) {
                   </select>
                 </label>
               )}
-              <label className="select-field">
-                <span>Sort by</span>
-                <select
-                  value={sort}
-                  onChange={(event) => {
-                    setSort(event.target.value);
-                    setPage(1);
-                  }}
-                >
-                  <option value="rank">National rank</option>
-                  <option value="score">Opportunity score</option>
-                  <option value="population">Residents 60+</option>
-                  <option value="concentration">60+ share</option>
-                  <option value="financialCapacity">Financial capacity</option>
-                  <option value="name">Area name</option>
-                </select>
-              </label>
+              <SortMenu
+                value={sort}
+                onChange={(nextSort) => {
+                  setSort(nextSort);
+                  setPage(1);
+                }}
+              />
               <span className="result-count">{resultLabel}</span>
             </div>
             {error ? (
@@ -370,8 +365,8 @@ export function Dashboard({ initialAreas, initialSummary }: DashboardProps) {
             financial data makes an area ineligible rather than silently
             assigning a value.
           </p>
-          <a href={areas.metadata.sourceUrl} target="_blank" rel="noreferrer">
-            View Census dataset
+          <a href={censusDocumentationUrl} target="_blank" rel="noreferrer">
+            View Census documentation
           </a>
         </section>
       </main>
