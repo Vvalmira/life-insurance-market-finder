@@ -41,4 +41,37 @@ describe("fetchCensusMetrics", () => {
     expect(countyUrl.searchParams.get("key")).toBe("test-key");
     expect(metrics.map((row) => row.geoid)).toEqual(["01", "01001"]);
   });
+
+  it("accepts Census nulls as missing optional financial data", async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      const isCounty = url.searchParams.get("for") === "county:*";
+      return {
+        ok: true,
+        json: async () => [
+          [...CENSUS_FIELDS, "state", ...(isCounty ? ["county"] : [])],
+          isCounty
+            ? [
+                "Autauga County, Alabama",
+                "25",
+                "2",
+                "22",
+                "1",
+                null,
+                null,
+                "01",
+                "001",
+              ]
+            : stateRow,
+        ],
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const metrics = await fetchCensusMetrics("test-key");
+    const county = metrics.find((row) => row.geoid === "01001");
+
+    expect(county?.financialCapacityPercent).toBeNull();
+    expect(county?.financialCapacityMoe).toBeNull();
+  });
 });

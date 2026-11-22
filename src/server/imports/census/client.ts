@@ -9,9 +9,13 @@ import {
   INCLUDED_STATE_FIPS,
 } from "./constants";
 
-const responseSchema = z.array(z.array(z.string()));
+const responseSchema = z.array(z.array(z.string().nullable())).min(1);
 
-function parseNumber(value: string): number | null {
+function parseNumber(value: string | null | undefined): number | null {
+  if (value === null || value === undefined || value.trim() === "") {
+    return null;
+  }
+
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
@@ -25,17 +29,30 @@ function buildUrl(level: AreaLevel, apiKey: string): string {
   return url.toString();
 }
 
-function rowsToObjects(rows: string[][]): Record<string, string>[] {
-  const [header, ...body] = rows;
-  if (!header) throw new Error("Census response did not contain a header row");
+function rowsToObjects(
+  rows: (string | null)[][],
+): Record<string, string | null>[] {
+  const [rawHeader, ...body] = rows;
+  if (!rawHeader) {
+    throw new Error("Census response did not contain a header row");
+  }
+
+  const header = rawHeader.map((field) => {
+    if (field === null || field.trim() === "") {
+      throw new Error("Census response contained an invalid header field");
+    }
+    return field;
+  });
 
   return body.map((row) =>
-    Object.fromEntries(header.map((field, index) => [field, row[index] ?? ""])),
+    Object.fromEntries(
+      header.map((field, index) => [field, row[index] ?? null]),
+    ),
   );
 }
 
 function normalizeRow(
-  row: Record<string, string>,
+  row: Record<string, string | null>,
   level: AreaLevel,
   stateNames: Map<string, string>,
 ): RawAreaMetrics | null {
@@ -52,10 +69,10 @@ function normalizeRow(
       ? rawName
       : (stateNames.get(stateFips) ?? "Unknown state");
 
-  const population60Plus = parseNumber(row.S0101_C01_028E ?? "");
-  const population60PlusMoe = parseNumber(row.S0101_C01_028M ?? "");
-  const population60PlusPercent = parseNumber(row.S0101_C02_028E ?? "");
-  const population60PlusPercentMoe = parseNumber(row.S0101_C02_028M ?? "");
+  const population60Plus = parseNumber(row.S0101_C01_028E);
+  const population60PlusMoe = parseNumber(row.S0101_C01_028M);
+  const population60PlusPercent = parseNumber(row.S0101_C02_028E);
+  const population60PlusPercentMoe = parseNumber(row.S0101_C02_028M);
 
   if (
     population60Plus === null ||
@@ -76,15 +93,15 @@ function normalizeRow(
     population60PlusMoe,
     population60PlusPercent,
     population60PlusPercentMoe,
-    financialCapacityPercent: parseNumber(row.S0102_C02_089E ?? ""),
-    financialCapacityMoe: parseNumber(row.S0102_C02_089M ?? ""),
+    financialCapacityPercent: parseNumber(row.S0102_C02_089E),
+    financialCapacityMoe: parseNumber(row.S0102_C02_089M),
   };
 }
 
 async function fetchRows(
   level: AreaLevel,
   apiKey: string,
-): Promise<string[][]> {
+): Promise<(string | null)[][]> {
   const response = await fetch(buildUrl(level, apiKey), {
     headers: { Accept: "application/json" },
     signal: AbortSignal.timeout(30_000),
